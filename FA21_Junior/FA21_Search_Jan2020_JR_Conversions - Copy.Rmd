@@ -69,17 +69,36 @@ my_soql <- sprintf("SELECT Id,
                            Initial_Referral_Source__c, 
                            Recruiting_Category__c,
                            Ref__c, 
-                           Primary_State_Code__c
+                           Primary_State_Code__c, 
+                           Lead_Segment_College_Board__c,
+                           Lead_Segment_NRCCUA__c
                            
                     FROM Contact 
                     WHERE DAY_ONLY(CreatedDate) > 2020-02-25 
-                    AND DAY_ONLY(CreatedDate) < 2020-03-03 
+                    AND DAY_ONLY(CreatedDate) < 2020-03-13 
                     AND TargetX_SRMb__Status__c != 'Lead' 
                     AND (Lead_Segment_College_Board__c != ' ' 
                     OR 	Lead_Segment_NRCCUA__c  != ' ') 
-                    AND TargetX_SRMb__Anticipated_Start_Year__c = 2021")
+                    
+                   "
+                   )
 
 queried_records <- sf_query(my_soql)
+
+both <- "Both"
+
+queried_records <- queried_records %>% mutate(
+  Lead_Segment_College_Board__c = gsub(";", "", Lead_Segment_College_Board__c, fixed = TRUE), 
+  Lead_Segment_NRCCUA__c = gsub(";", "", Lead_Segment_NRCCUA__c, fixed = T),
+  
+  Initial_Code = paste0(Lead_Segment_College_Board__c, Lead_Segment_NRCCUA__c), 
+  Initial_Code = gsub("NA" , "", Initial_Code, fixed = T), 
+  Initial_Code_len = str_length(Initial_Code), 
+  Initial_Code = ifelse(Initial_Code_len > 13,both,Initial_Code ), 
+  Vendor = ifelse(grepl("^N", Initial_Code), "NRCCUA", 
+                  ifelse(grepl("^P",Initial_Code),  "College Board", 
+                         ifelse(Initial_Code == "Both", "Both", "Neither")))) %>% filter(Vendor != "Neither")
+
 ```
  
 
@@ -108,9 +127,25 @@ January 2020
 
 ```{r}
 LeadsUploaded <- read.csv("C:/Users/christine.iyer/Box/Search/FY20_Search/FY20_January_Search/FA21_Junior/FA21_Search_Jan2020_JR.csv", header = T, stringsAsFactors = F)
-names(LeadsUploaded)
-dim(LeadsUploaded)
+head(LeadsUploaded)
+head(queried_records)
+#"Lead.Segment.College.Board"  "Lead.Segment.NRCCUA" 
+
+LeadsUploaded <- LeadsUploaded %>%  mutate(
+  Lead.Segment.College.Board = gsub(";", "", Lead.Segment.College.Board, fixed = TRUE), 
+  Lead.Segment.NRCCUA = gsub(";", "", Lead.Segment.NRCCUA, fixed = T),
+  
+  Initial_Code = paste0(Lead.Segment.College.Board, Lead.Segment.NRCCUA), 
+  Initial_Code = gsub("NA" , "", Initial_Code, fixed = T), 
+  Initial_Code_len = str_length(Initial_Code), 
+  Initial_Code = ifelse(Initial_Code_len > 13,both,Initial_Code ), 
+  Vendor = ifelse(grepl("^N", Initial_Code), "NRCCUA", 
+                  ifelse(grepl("^P",Initial_Code),  "College Board", 
+                         ifelse(Initial_Code == "Both", "Both", "Neither"))))
+
 LeadsUploaded %>% group_by(Email, Lead.Segment.College.Board, Lead.Segment.NRCCUA) %>% summarise(n = n()) %>% filter(n>1)
+
+
 
 trythis <- merge(LeadsUploaded, queried_records, by = "Email" )
 trythis <- trythis %>% mutate(DateCollected = Sys.Date())
@@ -118,22 +153,22 @@ trythis <- trythis %>% mutate(DateCollected = Sys.Date())
 trythis
 # Don't forget to change the date!
 
-write.csv(trythis, "C:/Users/christine.iyer/Box/Search/FY20_Search/FY20_January_Search/FA21_Junior/Conversions/Conversion_3-03-20_DeDuped.csv")
+#write.csv(trythis, "C:/Users/christine.iyer/Box/Search/FY20_Search/FY20_January_Search/FA21_Junior/Conversions/Conversion_3-03-20_DeDuped.csv")
 trythis %>% 
   #filter(Student.Stage == "Lead") %>% 
   mutate(Name = paste0(Last.Name, ", ", First.Name)) %>% 
-  group_by(Student.Stage,TargetX_SRMb__Status__c,  Email, Created.Date, Ref__c, Recruiting_Category__c,Recruiting.Category, Lead.Segment.College.Board, Lead.Segment.NRCCUA) %>% summarise(n = n())
+  group_by(Vendor,Student.Stage,TargetX_SRMb__Status__c,  Email, Created.Date, Ref__c, Recruiting_Category__c,Recruiting.Category, Lead.Segment.College.Board, Lead.Segment.NRCCUA) %>% summarise(n = n())
 
 ```
 
 
 ```{r}
-trythis1 <- trythis %>% group_by(Primary_State_Code__c) %>% summarise(Inqs = n())
+trythis1 <- trythis %>% group_by(Vendor,Primary_State_Code__c) %>% summarise(Inqs = n())
 ```
 
 
 ```{r}
-trythis1 %>% mutate(Recruiting.Category_Geo = ifelse(Primary_State_Code__c == "ME", "In_State", "Out-Of-State")) %>% group_by(Recruiting.Category_Geo) %>% summarise(Inqs = sum(Inqs))
+trythis1 %>% mutate(Recruiting.Category_Geo = ifelse(Primary_State_Code__c == "ME", "In-State", "Out-Of-State")) %>% group_by(Vendor,Recruiting.Category_Geo) %>% summarise(Inqs = sum(Inqs)) %>% filter(Vendor != "Both")
 
 ```
 
