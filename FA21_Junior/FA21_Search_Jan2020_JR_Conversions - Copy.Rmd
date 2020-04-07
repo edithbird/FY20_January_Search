@@ -1,14 +1,18 @@
 ---
-title: "FA21_Search_Jan2020_FR"
+title: "FY20_Search_January2020"
 author: "Office of Marketing and Brand Management"
-date: "3/2/2020"
+date: "Updated on `r Sys.Date()`"
 output:
   html_document:
     df_print: paged
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
 ```
 
 ```{r}
@@ -16,6 +20,7 @@ library(dplyr)
 library(salesforcer)
 library(knitr)
 library(RForcecom)
+library(stringr)
 ```
 
 
@@ -45,11 +50,6 @@ password <- "1EdithandoliveriFhpXgaXnuP3L5PQr69Zw2yOy"
 #securityToken <- ""
 instanceURL <- "https://na24.salesforce.com/"
 apiVersion <- "44.0"
-
-
-
-
-
 session <- rforcecom.login(username, password, instanceURL,apiVersion  ) 
 ```
 
@@ -84,53 +84,36 @@ my_soql <- sprintf("SELECT Id,
                    )
 
 queried_records <- sf_query(my_soql)
-
+```
+ 
+```{r}
 both <- "Both"
 
 queried_records <- queried_records %>% mutate(
   Lead_Segment_College_Board__c = gsub(";", "", Lead_Segment_College_Board__c, fixed = TRUE), 
   Lead_Segment_NRCCUA__c = gsub(";", "", Lead_Segment_NRCCUA__c, fixed = T),
-  
   Initial_Code = paste0(Lead_Segment_College_Board__c, Lead_Segment_NRCCUA__c), 
   Initial_Code = gsub("NA" , "", Initial_Code, fixed = T), 
   Initial_Code_len = str_length(Initial_Code), 
   Initial_Code = ifelse(Initial_Code_len > 13,both,Initial_Code ), 
   Vendor = ifelse(grepl("^N", Initial_Code), "NRCCUA", 
                   ifelse(grepl("^P",Initial_Code),  "College Board", 
-                         ifelse(Initial_Code == "Both", "Both", "Neither")))) %>% filter(Vendor != "Neither")
+                         ifelse(Initial_Code == "Both", "Both", "Neither"))), 
+  Id = str_sub(Id, 1, str_length(Id)-3),
+  Id = toupper(Id)) %>% filter(Vendor != "Neither")
 
 ```
- 
 
 
 
-Purchase Dates:
-11/10/2015,
-3/2/2016,
-6/21/2016,
-6/28/2016,
-10/4/2016,
-12/12/2016,
-2/14/2017,
-6/6/2017,
-6/7/2017,
-10/12/2017,
-2/26/2018,
-2/22/2018,
-10/18/2018,
-12/02/2019, 
-12/05/2019, 
-02/06/2019
-
-
-January 2020
+January 2020 Leads
 
 ```{r}
-LeadsUploaded <- read.csv("C:/Users/christine.iyer/Box/Search/FY20_Search/FY20_January_Search/FA21_Junior/FA21_Search_Jan2020_JR.csv", header = T, stringsAsFactors = F)
-head(LeadsUploaded)
-head(queried_records)
-#"Lead.Segment.College.Board"  "Lead.Segment.NRCCUA" 
+LeadsUploaded <- read.csv("C:/Users/christine.iyer/Box/Search/FY20_Search/FY20_Combined_Search_Feb_March/FY20_Feb_Search_Upload_DeDuped.csv", header = T, stringsAsFactors = F)
+LeadsUploaded <- LeadsUploaded %>% rename(Id = Contact.ID) %>% mutate(Id = toupper(Id))
+```
 
+```{r}
 LeadsUploaded <- LeadsUploaded %>%  mutate(
   Lead.Segment.College.Board = gsub(";", "", Lead.Segment.College.Board, fixed = TRUE), 
   Lead.Segment.NRCCUA = gsub(";", "", Lead.Segment.NRCCUA, fixed = T),
@@ -143,32 +126,63 @@ LeadsUploaded <- LeadsUploaded %>%  mutate(
                   ifelse(grepl("^P",Initial_Code),  "College Board", 
                          ifelse(Initial_Code == "Both", "Both", "Neither"))))
 
+```
+
+```{r}
+trythis1 <- merge(LeadsUploaded, queried_records, by = "Id" ) 
+trythis1 <- trythis1 %>% select(Id, Email = Email.x, Student.Stage, Anticipated.Start.Year,Vendor = Vendor.x, NewStatus = TargetX_SRMb__Status__c,AppStatus = App.Application.Status, City = Primary.City, State = Primary.State.Province)
+#trythis <- trythis %>% mutate(DateCollected = Sys.Date())
+
+# Don't forget to change the date!
+
+#Version 2 
+
+trythis2 <- merge(LeadsUploaded, queried_records, by = "Email" )
+trythis2 <- trythis2%>% select(Id = Id.x, Email, Student.Stage, Anticipated.Start.Year,Vendor = Vendor.x, NewStatus = TargetX_SRMb__Status__c,AppStatus = App.Application.Status, City = Primary.City, State = Primary.State.Province)
+
+
+trythis3 <- left_join(trythis1, trythis2)
+
+kable(trythis3 %>% group_by(Vendor, Anticipated.Start.Year, NewStatus) %>% summarise(n = n()))
+
+```
+
+
+```{r eval=FALSE, include=FALSE}
+head(LeadsUploaded)
+head(queried_records)
+#"Lead.Segment.College.Board"  "Lead.Segment.NRCCUA" 
+
+
 LeadsUploaded %>% group_by(Email, Lead.Segment.College.Board, Lead.Segment.NRCCUA) %>% summarise(n = n()) %>% filter(n>1)
 
 
 
-trythis <- merge(LeadsUploaded, queried_records, by = "Email" )
-trythis <- trythis %>% mutate(DateCollected = Sys.Date())
 
-trythis
 # Don't forget to change the date!
 
+```
+
+
+```{r}
+
 #write.csv(trythis, "C:/Users/christine.iyer/Box/Search/FY20_Search/FY20_January_Search/FA21_Junior/Conversions/Conversion_3-03-20_DeDuped.csv")
-trythis %>% 
-  #filter(Student.Stage == "Lead") %>% 
-  mutate(Name = paste0(Last.Name, ", ", First.Name)) %>% 
-  group_by(Vendor,Student.Stage,TargetX_SRMb__Status__c,  Email, Created.Date, Ref__c, Recruiting_Category__c,Recruiting.Category, Lead.Segment.College.Board, Lead.Segment.NRCCUA) %>% summarise(n = n())
+# trythis %>% 
+#   #filter(Student.Stage == "Lead") %>% 
+#   mutate(Name = paste0(Last.Name, ", ", First.Name)) %>% 
+#   group_by(Vendor,Student.Stage,TargetX_SRMb__Status__c,  Email, Created.Date, Ref__c, Recruiting_Category__c,Recruiting.Category, Lead.Segment.College.Board, Lead.Segment.NRCCUA) %>% summarise(n = n())
 
 ```
 
 
+
 ```{r}
-trythis1 <- trythis %>% group_by(Vendor,Primary_State_Code__c) %>% summarise(Inqs = n())
+#trythis1 <- trythis %>% group_by(Vendor,Primary_State_Code__c) %>% summarise(Inqs = n())
 ```
 
 
 ```{r}
-trythis1 %>% mutate(Recruiting.Category_Geo = ifelse(Primary_State_Code__c == "ME", "In-State", "Out-Of-State")) %>% group_by(Vendor,Recruiting.Category_Geo) %>% summarise(Inqs = sum(Inqs)) %>% filter(Vendor != "Both")
+#trythis1 %>% mutate(Recruiting.Category_Geo = ifelse(Primary_State_Code__c == "ME", "In-State", "Out-Of-State")) %>% group_by(Vendor,Recruiting.Category_Geo) %>% summarise(Inqs = sum(Inqs)) %>% filter(Vendor != "Both")
 
 ```
 
